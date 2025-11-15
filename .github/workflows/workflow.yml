@@ -1,0 +1,66 @@
+name: build-run-deploy
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_ARTIFACT: david_peled_6025_l1.zip
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Create distribution zip
+        run: >
+          zip -r "${{ env.RELEASE_ARTIFACT }}"
+          src
+          tests
+          Dockerfile
+          .pytest.toml
+          .env
+          .dockerignore
+          .python-version
+          uv.lock
+          pyproject.toml
+          LICENSE
+          README.md
+          .pre-commit-config.yaml
+          .github
+          && mkdir dist
+          && cp "${{ env.RELEASE_ARTIFACT }}" dist
+
+      - name: Extract zip into clean workspace
+        run: |
+          mkdir build
+          mv "${{ env.RELEASE_ARTIFACT }}" build/
+          cd build
+          unzip "${{ env.RELEASE_ARTIFACT }}"
+
+      - name: Test
+        working-directory: build
+        run: uv run pytest
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}-${{ github.sha }}
+          name: ${{ github.ref_name }}-${{ github.sha }}
+          prerelease: true
+          files: ./dist/${{ env.RELEASE_ARTIFACT }}
