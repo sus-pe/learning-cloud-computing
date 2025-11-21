@@ -1,0 +1,54 @@
+[build-system]
+build-backend = "uv_build"
+requires = [ "uv-build" ]
+
+[project]
+name = "petstore"
+version = "0.1.0"
+description = "Pet Store API"
+requires-python = ">=3.14"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "fastapi",
+  "python-dotenv>=1.2.1",
+  "uvicorn",
+]
+
+[dependency-groups]
+dev = [
+  "docker>=7.1",
+  "httpx>=0.28.1",
+  "pre-commit",
+  "pytest",
+  "pytest-asyncio>=1.3",
+  "requests>=2.32.5",
+  "ruff",
+  "ty>=0.0.1a27",
+]
+
+[tool.ruff]
+lint.select = [ "ALL" ]
+lint.ignore = [
+  "COM812",
+  "D100",
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D105",
+  "D106",
+  "D107",
+  "D203",
+  "D211",
+  "D212",
+  "INP001",
+  "PT013",
+  "S101",
+]
+lint.fixable = [ "ALL" ]
+
+[tool.uv]
+default-groups = [ "dev" ]
