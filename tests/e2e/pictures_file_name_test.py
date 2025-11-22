@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from tests.conftest import PetStoreTester
+    from tests.e2e.conftest import PetStoreTester
 
 
 @pytest.mark.xfail(
