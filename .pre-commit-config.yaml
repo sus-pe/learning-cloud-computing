@@ -32,6 +32,8 @@ repos:
     rev: v2.12.0
     hooks:
       - id: hadolint-docker
+        exclude_types:
+          - xml
   - repo: local
     hooks:
       - id: toml-format

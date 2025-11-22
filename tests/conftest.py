@@ -1,9 +1,59 @@
-from _pytest.fixtures import fixture
+from collections.abc import Generator
+from pathlib import Path
+
+import docker
+import pytest
+from docker import DockerClient
 from dotenv import dotenv_values
+from pytest import fixture
 
 type DotEnv = dict[str, str | None]
+type PersistentFixture[T] = Generator[T]
+
+PETSTORE_PORT_ENV_KEY: str = "PETSTORE_PORT"
+pytest.register_assert_rewrite("petstore.tester")
 
 
 @fixture(scope="session")
-def dotenv() -> DotEnv:
-    return dotenv_values()
+def project_root() -> Path:
+    expected = Path(__file__).resolve().parent.parent.resolve()
+    assert expected.is_dir(), f"Expected project root to exist {expected!r}"
+    return expected
+
+
+@fixture(scope="session")
+def dotenv_path(project_root: Path) -> Path:
+    expected = project_root / ".env"
+    assert expected.is_file(), f"Expected .env file to exist {expected!r}"
+    return expected
+
+
+@fixture(scope="session")
+def dotenv(dotenv_path: Path) -> DotEnv:
+    return dotenv_values(dotenv_path)
+
+
+@fixture(scope="session")
+def secret_ninja_api_key(dotenv: DotEnv) -> str:
+    assert "NINJA_API_KEY" in dotenv
+    key = dotenv["NINJA_API_KEY"]
+    assert key
+    return key
+
+
+@fixture(scope="session")
+def petstore_port(dotenv: DotEnv) -> int:
+    assert PETSTORE_PORT_ENV_KEY in dotenv
+    port = dotenv[PETSTORE_PORT_ENV_KEY]
+    assert port
+    return int(port)
+
+
+@fixture(scope="session")
+def petstore_base_url(petstore_port: int) -> str:
+    return f"http://localhost:{petstore_port}"
+
+
+@fixture(scope="session")
+def docker_engine() -> DockerClient:
+    return docker.from_env()

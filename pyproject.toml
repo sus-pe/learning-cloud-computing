@@ -14,8 +14,11 @@ classifiers = [
 dependencies = [
   "fastapi",
   "python-dotenv>=1.2.1",
+  "redis>=7.1",
   "uvicorn",
 ]
+
+scripts.petstore = "petstore.__main__:main"
 
 [dependency-groups]
 dev = [

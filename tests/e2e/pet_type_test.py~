@@ -3,7 +3,23 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from tests.e2e.conftest import PetStoreTester
+    from petstore.tester import PetStoreTester
+
+
+async def test_post_pet_type_creates_new_type(tester: PetStoreTester) -> None:
+    name = tester.example_pet_type_name()
+    r = await tester.post_pet_type(type_name=name)
+    tester.assert_created_type_matches(r, expected_type=name)
+
+
+async def test_post_pet_type_nonexisting(tester: PetStoreTester) -> None:
+    r = await tester.post_pet_type(type_name="this is not a real pet")
+    tester.assert_bad_request(r)
+
+
+async def test_post_pet_type_unsupported_type(tester: PetStoreTester) -> None:
+    r = await tester.post_pet_type_raw(123)
+    tester.assert_bad_request(r)
 
 
 @pytest.mark.xfail(
@@ -97,20 +113,6 @@ async def test_get_picture_returns_binary(tester: PetStoreTester) -> None:
 async def test_get_picture_not_available(tester: PetStoreTester) -> None:
     r = await tester.get_picture("xxxxx-nope.jpg")
     tester.assert_not_found(r)
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="POST /pet-types creation not implemented",
-)
-async def test_post_pet_type_creates_new_type(tester: PetStoreTester) -> None:
-    name = tester.random_type_name()
-    r = await tester.post_pet_type(type_name=name)
-    tester.assert_created(r)
-    tester.assert_json_pet_type(r)
-    tester.assert_predicate(r, lambda x: x["type"] == name)
-    tester.assert_predicate(r, lambda x: x["pets"] == [])
 
 
 @pytest.mark.xfail(

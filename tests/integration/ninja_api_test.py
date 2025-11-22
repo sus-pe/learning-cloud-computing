@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from httpx import AsyncClient
+    from petstore.ninja import NinjaAnimals
 
 EXPECTED_CHEETAH = [
     {
@@ -46,6 +46,6 @@ EXPECTED_CHEETAH = [
 ]
 
 
-async def test_ninja(ninja_client: AsyncClient) -> None:
-    cheetah = await ninja_client.get("/v1/animals", params={"name": "cheetah"})
-    assert cheetah.json() == EXPECTED_CHEETAH
+async def test_ninja(ninja: NinjaAnimals) -> None:
+    cheetah = await ninja.get("cheetah")
+    assert cheetah == EXPECTED_CHEETAH
