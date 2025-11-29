@@ -2,12 +2,21 @@ import re
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any
 
+import anyio
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
+from redis import WatchError
 from starlette.exceptions import HTTPException as InternalHTTPException
 from starlette.responses import JSONResponse
 
+from petstore.model import (
+    CreateNewPetRequest,
+    CreatePetTypeRequest,
+    PetEntity,
+    PetTypeEntity,
+    Picture,
+)
 from petstore.ninja import NinjaAnimals, NinjaApiError, get_ninja
 from petstore.redis import get_redis
 
@@ -27,30 +36,6 @@ async def http_exception_handler(
     )
 
 
-class PetStoreModel(BaseModel):
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_strings(cls, data: dict) -> dict:
-        for k, v in list(data.items()):
-            if isinstance(v, str):
-                data[k] = v.lower()
-        return data
-
-
-class PetTypeCreate(PetStoreModel):
-    type: str
-
-
-class PetType(PetStoreModel):
-    id: str
-    type: str
-    family: str
-    genus: str
-    attributes: list[str]
-    lifespan: int | None
-    pets: list[str]
-
-
 class PetStoreStorage:
     def __init__(self, redis_backend: Redis) -> None:
         self._backend = redis_backend
@@ -67,13 +52,13 @@ class PetStoreStorage:
         assert type_id
         return f"{self._pet_types_key}:{type_id}"
 
-    async def get_pet_type(self, type_id: str) -> PetType | None:
+    async def get_pet_type(self, type_id: str) -> PetTypeEntity | None:
         k = self._pet_types_id_key(type_id)
         p = await self._backend.get(k)
         if not p:
             return None
 
-        return PetType.model_validate_json(p)
+        return PetTypeEntity.model_validate_json(p)
 
     async def delete_pet_type(self, type_id: str) -> int:
         """Return how many keys were deleted. 0 if none."""
@@ -87,9 +72,9 @@ class PetStoreStorage:
         genus: str,
         attributes: list[str],
         lifespan: int | None,
-    ) -> PetType:
+    ) -> PetTypeEntity:
         pet_id = await self._get_unique_pet_type_id(type_name)
-        p = PetType(
+        p = PetTypeEntity(
             id=pet_id,
             type=type_name,
             family=family,
@@ -125,14 +110,14 @@ class PetStoreStorage:
 
     async def list_pet_types(
         self, family: str | None, attrs: list[str] | None
-    ) -> list[PetType]:
+    ) -> list[PetTypeEntity]:
         keys = await self._backend.keys(self._pet_types_id_key("*"))
-        items: list[PetType] = []
+        items: list[PetTypeEntity] = []
 
         for key in keys:
             raw = await self._backend.get(key)
             if raw:
-                items.append(PetType.model_validate_json(raw))
+                items.append(PetTypeEntity.model_validate_json(raw))
 
         if family is not None:
             items = [x for x in items if x.family.lower() == family.lower()]
@@ -149,6 +134,64 @@ class PetStoreStorage:
 
     async def get_type_name_id(self, type_name: str) -> str:
         return await self._backend.get(self._pet_type_name_id_key(type_name))
+
+    async def create_new_pet(
+        self,
+        *,
+        pet_type: PetTypeEntity,
+        pet_name: str,
+        birthdate: str | None,
+        picture_file: str | None,
+    ) -> PetEntity:
+        pipe = self._backend.pipeline()
+        pet_type_key = self._pet_types_id_key(pet_type.id)
+        pet_key = self._pet_key(pet_type.id, pet_name)
+        new_pet = PetEntity(
+            name=pet_name,
+            birthdate=birthdate or "NA",
+            picture=picture_file or "NA",
+        )
+        new_pet_type = pet_type.model_copy()
+        new_pet_type.pets.append(pet_name)
+        try:
+            await pipe.watch(pet_key)
+            await pipe.watch(pet_type_key)
+            await pipe.set(pet_key, new_pet.model_dump_json())
+            await pipe.set(pet_type_key, new_pet_type.model_dump_json())
+        except WatchError as e:
+            # Race occurred, someone beat us to saving the name.
+            # so we just tell the caller that the pet name exists.
+            raise MalformedDataError from e
+        else:
+            return new_pet
+
+    def _pet_key(self, type_id: str, name: str) -> str:
+        assert type_id
+        assert name
+        type_key = self._pet_types_id_key(type_id)
+        assert type_key
+        return f"{type_key}:{name}"
+
+    async def get_picture_by_url(self, url: str) -> Picture | None:
+        pic = await self._backend.get(url)
+        if not pic:
+            return None
+        return Picture.model_validate_json(pic)
+
+    async def store_picture(self, picture: Picture) -> None:
+        await self._backend.setnx(picture.id, picture.model_dump_json())
+        await self._backend.setnx(picture.filename, picture.id)
+
+        async with await anyio.open_file(picture.filename, "wb") as f:
+            await f.write(picture.content)
+
+    async def get_pet(self, pet_type_id: str, pet_name: str) -> PetEntity | None:
+        key = self._pet_key(type_id=pet_type_id, name=pet_name)
+        p = await self._backend.get(key)
+        if not p:
+            return None
+
+        return PetEntity.model_validate_json(p)
 
 
 PetStoreStorageDI = Annotated[PetStoreStorage, Depends(PetStoreStorage.get)]
@@ -187,11 +230,12 @@ async def petstore_server_error(request: Request, exc: Exception) -> JSONRespons
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(
-    _request: Request, _exc: RequestValidationError
+    request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    payload = await request.json()
     return JSONResponse(
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-        content={"error": "Expected application/json media type"},
+        content={"error": f"Expected application/json media type: {payload=} {exc=}"},
     )
 
 
@@ -205,11 +249,11 @@ class PetStoreResource(StrEnum):
 
 class NotFoundError(HTTPException):
     def __init__(self) -> None:
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
 
 @app.get(PetStoreResource.PET_TYPE_ID, status_code=status.HTTP_200_OK)
-async def get_pet_type_id(type_id: str, backend: PetStoreStorageDI) -> PetType:
+async def get_pet_type_id(type_id: str, backend: PetStoreStorageDI) -> PetTypeEntity:
     p = await backend.get_pet_type(type_id)
     if not p:
         raise NotFoundError
@@ -224,17 +268,20 @@ async def delete_pet_type_id(type_id: str, backend: PetStoreStorageDI) -> None:
         raise NotFoundError
 
 
+NinjaApiDI = Annotated[NinjaAnimals, Depends(get_ninja)]
+
+
 @app.post(PetStoreResource.PET_TYPE, status_code=status.HTTP_201_CREATED)
 async def post_pet_type(
-    payload: Annotated[PetTypeCreate, Body()],
-    ninja: Annotated[NinjaAnimals, Depends(get_ninja)],
+    payload: Annotated[CreatePetTypeRequest, Body()],
+    ninja_api: NinjaApiDI,
     backend: PetStoreStorageDI,
-) -> PetType:
+) -> PetTypeEntity:
     type_name: str = payload.type.lower()
     if await backend.get_type_name_id(type_name):
         raise MalformedDataError
 
-    animals: list[dict[str, Any]] = await ninja.get(type_name)
+    animals: list[dict[str, Any]] = await ninja_api.get(type_name)
     if not animals:
         raise MalformedDataError
 
@@ -282,7 +329,7 @@ class PetTypeQuery(BaseModel, extra="allow"):
 async def list_pet_types(
     backend: PetStoreStorageDI,
     query: Annotated[PetTypeQuery, Query()],
-) -> list[PetType]:
+) -> list[PetTypeEntity]:
     if query.model_extra:
         return []
 
@@ -292,3 +339,51 @@ async def list_pet_types(
 @app.post("/force-clear", status_code=status.HTTP_200_OK)
 async def force_clear(backend: PetStoreStorageDI) -> None:
     await backend.clear()
+
+
+@app.post(PetStoreResource.PET_TYPE_ID_PETS, status_code=status.HTTP_201_CREATED)
+async def post_new_pet_to_type(
+    type_id: str,
+    storage_api: PetStoreStorageDI,
+    ninja_api: NinjaApiDI,
+    request: CreateNewPetRequest,
+) -> PetEntity:
+    pet_type = await storage_api.get_pet_type(type_id)
+    if not pet_type:
+        raise NotFoundError
+    picture_filename = "NA"
+    if request.picture_url:
+        url = request.picture_url.encoded_string()
+        pic = await storage_api.get_picture_by_url(url=url)
+        if not pic:
+            pic = await ninja_api.get_picture_for_pet(
+                picture_url=url,
+                pet_name=request.name,
+                pet_type=pet_type.id,
+            )
+            await storage_api.store_picture(pic)
+        picture_filename = pic.filename
+
+    return await storage_api.create_new_pet(
+        pet_type=pet_type,
+        pet_name=request.name,
+        birthdate=request.birthdate,
+        picture_file=picture_filename,
+    )
+
+
+@app.get(PetStoreResource.PET_TYPE_ID_PETS, status_code=status.HTTP_200_OK)
+async def get_pets_for_pet_type(
+    type_id: str, backend: PetStoreStorageDI
+) -> list[PetEntity]:
+    pet_type = await backend.get_pet_type(type_id)
+    if not pet_type:
+        raise NotFoundError
+
+    items: list[PetEntity] = []
+    for pet_name in pet_type.pets:
+        pet = await backend.get_pet(type_id, pet_name)
+        assert pet
+        items.append(pet)
+
+    return items

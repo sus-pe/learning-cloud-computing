@@ -231,6 +231,7 @@ name = "petstore"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "fastapi" },
     { name = "python-dotenv" },
     { name = "redis" },
@@ -251,9 +252,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.11.0" },
     { name = "fastapi" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
-    { name = "redis", specifier = ">=7.1.0" },
+    { name = "redis", specifier = ">=7.1" },
     { name = "uvicorn" },
 ]
 

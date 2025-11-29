@@ -1,3 +1,4 @@
+import mimetypes
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -5,6 +6,8 @@ from json import JSONDecodeError
 from typing import TYPE_CHECKING, Any
 
 from httpx import AsyncClient, AsyncHTTPTransport, Response, Timeout
+
+from petstore.model import Picture
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -48,6 +51,27 @@ class NinjaAnimals:
             return response.json()
         except (JSONDecodeError, AssertionError) as e:
             raise NinjaApiError(response=response) from e
+
+    async def get_picture_for_pet(
+        self, picture_url: str, pet_type: str, pet_name: str
+    ) -> Picture:
+        """Return content and content-type."""
+        r = await self.api.get(picture_url)
+        r.raise_for_status()
+        content_type = r.headers["content-type"]
+        assert content_type.startswith("image/")
+        ext = mimetypes.guess_extension(content_type)
+        _, _encoding = mimetypes.guess_type(picture_url)
+        assert ext
+
+        filename = f"{pet_type}.{pet_name}{ext}"
+        return Picture(
+            content=r.content,
+            type=content_type,
+            id=picture_url,
+            ext=ext,
+            filename=filename,
+        )
 
 
 async def get_ninja() -> AsyncGenerator[NinjaAnimals, Any]:

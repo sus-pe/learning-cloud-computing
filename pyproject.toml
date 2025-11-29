@@ -12,6 +12,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+  "anyio>=4.11",
   "fastapi",
   "python-dotenv>=1.2.1",
   "redis>=7.1",

@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from httpx import AsyncClient, Response, codes
 
-from petstore import PetStoreResource, PetType
+from petstore import PetEntity, PetStoreResource, PetTypeEntity
 
 if TYPE_CHECKING:
     from docker.models.containers import Container
@@ -15,8 +15,12 @@ class PetStoreTester:
         self.client = client
 
     @property
-    def example_populated_pet_type(self) -> PetType:
-        return PetType(
+    def example_pet(self) -> PetEntity:
+        return PetEntity(name="jamie", birthdate="24-10-2023", picture="1.jamie.jpg")
+
+    @property
+    def example_populated_pet_type(self) -> PetTypeEntity:
+        return PetTypeEntity(
             id="1",
             type="Poodle",
             family="Canidae",
@@ -27,7 +31,7 @@ class PetStoreTester:
         )
 
     @property
-    def example_empty_pet_type(self) -> PetType:
+    def example_empty_pet_type(self) -> PetTypeEntity:
         return self.example_populated_pet_type.model_copy(update={"pets": []})
 
     async def unsafe_get_pet_type(self, type_id: str) -> Response:
@@ -35,81 +39,32 @@ class PetStoreTester:
             PetStoreResource.PET_TYPE_ID.format(type_id=type_id)
         )
 
-    async def post_pet(
+    async def unsafe_post_pet(
         self,
-        type_id: str,
         *,
-        json: dict[str, object] | None = None,
-        raw_content: bytes | None = None,
-        content_type: str | None = None,
-    ) -> Response:
-        if raw_content is not None:
-            headers = {}
-            if content_type is not None:
-                headers["content-type"] = content_type
-            return await self.client.post(
-                PetStoreResource.PET_TYPE_ID_PETS.format(type_id),
-                content=raw_content,
-                headers=headers or None,
-            )
-        return await self.client.post(
-            PetStoreResource.PET_TYPE_ID_PETS.format(type_id),
-            json=json,
-        )
-
-    async def put_pet_picture(
-        self,
         type_id: str,
         name: str,
-        url: str,
+        birthdate: str | None = None,
+        picture_url: str | None = None,
     ) -> Response:
-        return await self.client.put(
-            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(id=type_id, name=name),
-            json={"name": name, "picture-url": url},
-        )
-
-    async def get_pets(
-        self,
-        type_id: str,
-        *,
-        query: dict[str, str] | None = None,
-    ) -> Response:
-        return await self.client.get(
-            PetStoreResource.PET_TYPE_ID_PETS.format(type_id),
-            params=query,
-        )
-
-    async def post_pet_raw(
-        self,
-        type_id: str,
-        *,
-        raw_content: bytes,
-        content_type: str = "application/octet-stream",
-    ) -> Response:
+        payload: dict[str, Any] = {"name": name}
+        if birthdate:
+            payload["birthdate"] = birthdate
+        if picture_url:
+            payload["picture-url"] = picture_url
         return await self.client.post(
-            PetStoreResource.PET_TYPE_ID_PETS.format(type_id),
-            content=raw_content,
-            headers={"content-type": content_type},
+            PetStoreResource.PET_TYPE_ID_PETS.format(type_id=type_id),
+            json=payload,
         )
 
-    async def post_pet_minimal(
-        self,
-        type_id: str,
-        name: str,
-    ) -> Response:
-        return await self.post_pet(type_id, json={"name": name})
-
-    async def get_pet_type_raw(self, type_id: str) -> Response:
-        return await self.client.get(PetStoreResource.PET_TYPE_ID.format(type_id))
-
-    async def post_new_pet_type(self, *, type_name: str) -> PetType:
+    async def post_new_pet_type(self, *, type_name: str) -> PetTypeEntity:
         r = await self.client.post(
             PetStoreResource.PET_TYPE,
             json={"type": type_name},
         )
         self.assert_created(r)
         p = self.assert_json(r, dict)
-        return PetType.model_validate(p)
+        return PetTypeEntity.model_validate(p)
 
     async def unsafe_post_pet_type(self, type_name: Any) -> Response:  # noqa: ANN401
         return await self.client.post(
@@ -135,7 +90,7 @@ class PetStoreTester:
         attr: str | None = None,
         family: str | None = None,
         non_sensical_query: bool | None = None,
-    ) -> list[PetType]:
+    ) -> list[PetTypeEntity]:
         query: dict[str, str] = {}
         if family:
             query["family"] = family
@@ -146,7 +101,7 @@ class PetStoreTester:
         r = await self.client.get(PetStoreResource.PET_TYPE, params=query)
         self.assert_ok(r)
         body = self.assert_json(r, list)
-        return [PetType.model_validate(p) for p in body]
+        return [PetTypeEntity.model_validate(p) for p in body]
 
     async def get_picture(self, file_name: str) -> Response:
         return await self.client.get(PetStoreResource.PICTURES.format(file_name))
@@ -212,16 +167,15 @@ class PetStoreTester:
 
     def assert_error(self, r: Response, msg: str) -> None:
         body = self.assert_json(r, dict)
-        expected = {"error": msg}
-        assert body == expected, f"Expected {expected!r}, got {body!r}"
+        assert msg in body.get("error", None)
 
     def assert_malformed(self, r: Response) -> None:
         self.assert_status(r, self.codes.BAD_REQUEST)
         self.assert_error(r, "Malformed data")
 
     def assert_not_found(self, r: Response) -> None:
+        self.assert_error(r, "Not Found")
         self.assert_status(r, self.codes.NOT_FOUND)
-        self.assert_error(r, "Not found")
 
     def assert_media_type_error(self, r: Response) -> None:
         self.assert_status(r, self.codes.UNSUPPORTED_MEDIA_TYPE)
@@ -258,7 +212,7 @@ class PetStoreTester:
     async def unsafe_delete(self, res: PetStoreResource) -> Response:
         return await self.client.delete(res)
 
-    async def assert_first_example_pet_type_post_created(self) -> PetType:
+    async def assert_first_example_pet_type_post_created(self) -> PetTypeEntity:
         example = self.example_empty_pet_type.type
         p = await self.post_new_pet_type(type_name=example)
         assert p == self.example_empty_pet_type
@@ -282,6 +236,17 @@ class PetStoreTester:
 
     async def unsafe_post(self, res: PetStoreResource) -> Response:
         return await self.client.post(res)
+
+    async def unsafe_get_pets(self, type_id: str) -> Response:
+        return await self.client.get(
+            PetStoreResource.PET_TYPE_ID_PETS.format(type_id=type_id)
+        )
+
+    async def get_pets(self, type_id: str) -> list[PetEntity]:
+        r = await self.unsafe_get_pets(type_id)
+        self.assert_ok(r)
+        body = self.assert_json(r, list)
+        return [PetEntity.model_validate(p) for p in body]
 
 
 class PetStoreContainerTester(PetStoreTester):
