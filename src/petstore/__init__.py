@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Annotated, Any
 import anyio
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, Field
 from redis import WatchError
 from starlette.exceptions import HTTPException as InternalHTTPException
 from starlette.responses import JSONResponse
@@ -14,7 +13,9 @@ from petstore.model import (
     CreateNewPetRequest,
     CreatePetTypeRequest,
     PetEntity,
+    PetsQuery,
     PetTypeEntity,
+    PetTypeQuery,
     Picture,
 )
 from petstore.ninja import NinjaAnimals, NinjaApiError, get_ninja
@@ -62,8 +63,24 @@ class PetStoreStorage:
 
     async def delete_pet_type(self, type_id: str) -> int:
         """Return how many keys were deleted. 0 if none."""
-        k = self._pet_types_id_key(type_id)
-        return await self._backend.delete(k)
+        key = self._pet_types_id_key(type_id)
+        async with self._backend.pipeline() as pipe:
+            try:
+                await pipe.watch(key)
+                stored_pet_type = await pipe.get(key)
+                if not stored_pet_type:
+                    return 0
+
+                pet_type = PetTypeEntity.model_validate_json(stored_pet_type)
+                if len(pet_type.pets) != 0:
+                    raise MalformedDataError
+                pipe.multi()
+                await pipe.delete(key)
+                (deleted,) = await pipe.execute()
+            except WatchError as e:
+                raise MalformedDataError from e
+            else:
+                return int(deleted)
 
     async def create_new_pet_type(
         self,
@@ -143,7 +160,6 @@ class PetStoreStorage:
         birthdate: str | None,
         picture_file: str | None,
     ) -> PetEntity:
-        pipe = self._backend.pipeline()
         pet_type_key = self._pet_types_id_key(pet_type.id)
         pet_key = self._pet_key(pet_type.id, pet_name)
         new_pet = PetEntity(
@@ -153,17 +169,19 @@ class PetStoreStorage:
         )
         new_pet_type = pet_type.model_copy()
         new_pet_type.pets.append(pet_name)
-        try:
-            await pipe.watch(pet_key)
-            await pipe.watch(pet_type_key)
-            await pipe.set(pet_key, new_pet.model_dump_json())
-            await pipe.set(pet_type_key, new_pet_type.model_dump_json())
-        except WatchError as e:
-            # Race occurred, someone beat us to saving the name.
-            # so we just tell the caller that the pet name exists.
-            raise MalformedDataError from e
-        else:
-            return new_pet
+        async with self._backend.pipeline() as pipe:
+            try:
+                await pipe.watch(pet_key, pet_type_key)
+                pipe.multi()
+                pipe.set(pet_key, new_pet.model_dump_json())
+                pipe.set(pet_type_key, new_pet_type.model_dump_json())
+                await pipe.execute()
+            except WatchError as e:
+                # Race occurred, someone beat us to saving the name.
+                # so we just tell the caller that the pet name exists.
+                raise MalformedDataError from e
+            else:
+                return new_pet
 
     def _pet_key(self, type_id: str, name: str) -> str:
         assert type_id
@@ -320,11 +338,6 @@ async def post_pet_type_invalid_request() -> None:
     pass
 
 
-class PetTypeQuery(BaseModel, extra="allow"):
-    family: str | None = None
-    attrs: list[str] | None = Field(None, alias="hasAttribute")
-
-
 @app.get(PetStoreResource.PET_TYPE)
 async def list_pet_types(
     backend: PetStoreStorageDI,
@@ -374,16 +387,31 @@ async def post_new_pet_to_type(
 
 @app.get(PetStoreResource.PET_TYPE_ID_PETS, status_code=status.HTTP_200_OK)
 async def get_pets_for_pet_type(
-    type_id: str, backend: PetStoreStorageDI
+    type_id: str,
+    backend: PetStoreStorageDI,
+    query: Annotated[PetsQuery, Query()],
 ) -> list[PetEntity]:
     pet_type = await backend.get_pet_type(type_id)
     if not pet_type:
         raise NotFoundError
+
+    if query.model_extra:
+        return []
 
     items: list[PetEntity] = []
     for pet_name in pet_type.pets:
         pet = await backend.get_pet(type_id, pet_name)
         assert pet
         items.append(pet)
+
+    if query.birthdate_gt:
+        threshold = query.get_birthdate_gt()
+        assert threshold
+        items = [pet for pet in items if pet.is_birthdate_gt(threshold)]
+
+    if query.birthdate_lt:
+        threshold = query.get_birthdate_lt()
+        assert threshold
+        items = [pet for pet in items if pet.is_birthdate_lt(threshold)]
 
     return items

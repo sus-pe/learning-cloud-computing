@@ -1,8 +1,6 @@
 from typing import TYPE_CHECKING
 
-import pytest
-
-from petstore import PetEntity, PetStoreResource, PetTypeEntity
+from petstore import PetStoreResource, PetTypeEntity
 
 if TYPE_CHECKING:
     from petstore.tester import PetStoreTester
@@ -68,10 +66,11 @@ async def test_get_specific_pet_type(tester: PetStoreTester) -> None:
     tester.assert_not_found(not_found_delete_response)
 
 
-@pytest.mark.xfail(raises=NotImplementedError)
 async def test_delete_populated_pet_type(tester: PetStoreTester) -> None:
-    # Should return 400
-    raise NotImplementedError
+    pet_type = await tester.assert_first_example_pet_type_post_created()
+    await tester.post_dummy_pet(pet_type.id)
+    r = await tester.unsafe_delete_pet_type(pet_type.id)
+    tester.assert_malformed(r)
 
 
 async def test_put_pet_type_id_method_not_allowed(tester: PetStoreTester) -> None:
@@ -118,17 +117,25 @@ async def test_post_new_pet_to_type(tester: PetStoreTester) -> None:
         )
         tester.assert_malformed(r)
 
-    r = await tester.unsafe_post_pet(
-        type_id=created_type.id,
-        name=p.name,
+    p = await tester.post_new_pet(
+        pet_name=p.name,
+        pet_type=created_type.id,
         birthdate=p.birthdate,
         picture_url=picture_url,
     )
-    tester.assert_created(r)
-    body = tester.assert_json(r, dict)
-    p = PetEntity.model_validate(body)
     assert p == tester.example_pet
 
-    pets = await tester.get_pets(type_id=pt.id)
+    pets = await tester.get_pets(
+        type_id=pt.id,
+        birthdate_lt="25-10-2023",
+        birthdate_gt="23-10-2023",
+    )
     assert len(pets) == 1
     assert pets[0] == p
+
+    r = await tester.unsafe_get_pets(
+        type_id=pt.id,
+        birthdate_lt="25-30-2023",
+        birthdate_gt="23-10-2023",
+    )
+    tester.assert_malformed(r)

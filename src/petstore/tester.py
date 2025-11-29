@@ -16,7 +16,11 @@ class PetStoreTester:
 
     @property
     def example_pet(self) -> PetEntity:
-        return PetEntity(name="jamie", birthdate="24-10-2023", picture="1.jamie.jpg")
+        return PetEntity(
+            name="jamie",
+            birthdate="24-10-2023",
+            picture="1.jamie.jpg",
+        )
 
     @property
     def example_populated_pet_type(self) -> PetTypeEntity:
@@ -237,16 +241,56 @@ class PetStoreTester:
     async def unsafe_post(self, res: PetStoreResource) -> Response:
         return await self.client.post(res)
 
-    async def unsafe_get_pets(self, type_id: str) -> Response:
+    async def unsafe_get_pets(
+        self,
+        type_id: str,
+        birthdate_gt: str | None = None,
+        birthdate_lt: str | None = None,
+    ) -> Response:
+        query = {}
+        if birthdate_gt:
+            query["birthdateGT"] = birthdate_gt
+        if birthdate_lt:
+            query["birthdateLT"] = birthdate_lt
         return await self.client.get(
-            PetStoreResource.PET_TYPE_ID_PETS.format(type_id=type_id)
+            PetStoreResource.PET_TYPE_ID_PETS.format(type_id=type_id),
+            params=query,
         )
 
-    async def get_pets(self, type_id: str) -> list[PetEntity]:
-        r = await self.unsafe_get_pets(type_id)
+    async def get_pets(
+        self,
+        type_id: str,
+        birthdate_gt: str | None = None,
+        birthdate_lt: str | None = None,
+    ) -> list[PetEntity]:
+        r = await self.unsafe_get_pets(
+            type_id=type_id,
+            birthdate_gt=birthdate_gt,
+            birthdate_lt=birthdate_lt,
+        )
         self.assert_ok(r)
         body = self.assert_json(r, list)
         return [PetEntity.model_validate(p) for p in body]
+
+    async def post_new_pet(
+        self,
+        pet_type: str,
+        pet_name: str,
+        birthdate: str | None = None,
+        picture_url: str | None = None,
+    ) -> PetEntity:
+        r = await self.unsafe_post_pet(
+            type_id=pet_type,
+            name=pet_name,
+            birthdate=birthdate,
+            picture_url=picture_url,
+        )
+        self.assert_created(r)
+        body = self.assert_json(r, dict)
+        return PetEntity.model_validate(body)
+
+    async def post_dummy_pet(self, pet_type: str) -> PetEntity:
+        return await self.post_new_pet(pet_type, pet_name="dummy-name")
 
 
 class PetStoreContainerTester(PetStoreTester):
