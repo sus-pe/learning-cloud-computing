@@ -12,6 +12,7 @@ permissions:
 
 env:
   RELEASE_ARTIFACT: david_peled_6025_l1.zip
+  SECRET_NINJA_API_KEY: ${{ secrets.SECRET_NINJA_API_KEY }}
 
 jobs:
   e2e:
@@ -55,7 +56,7 @@ jobs:
 
       - name: Test
         working-directory: build
-        run: uv run pytest
+        run: uv run pytest --runxfail
 
       - name: release
         uses: softprops/action-gh-release@v2

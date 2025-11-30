@@ -1,92 +1,73 @@
-import contextlib
-import time
-from datetime import timedelta
-from os import environ
-from typing import TYPE_CHECKING
+from collections.abc import Generator
+from pathlib import Path
 
 import docker
+import pytest
 from docker import DockerClient
-from dotenv import load_dotenv
-from httpx import AsyncClient
+from dotenv import dotenv_values
 from pytest import fixture
-from pytest_asyncio import fixture as async_fixture
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Iterator
+type DotEnv = dict[str, str | None]
+type PersistentFixture[T] = Generator[T]
 
-    from docker.models.containers import Container
-
-
-class PetStoreTester:
-    def __init__(self, container: Container, base_url: str) -> None:
-        self.container: Container = container
-        self.base_url: str = base_url
-        self.min_status: int = 100
-        self.max_status: int = 599
-
-    def validate_status(self, status: int) -> bool:
-        return self.min_status <= status <= self.max_status
-
-
-CONTAINER_NAME: str = "petstore-test-container"
 PETSTORE_PORT_ENV_KEY: str = "PETSTORE_PORT"
-
-
-@fixture(scope="session", autouse=True)
-def load_env() -> None:
-    load_dotenv()
+pytest.register_assert_rewrite("petstore.tester")
 
 
 @fixture(scope="session")
-def petstore_port() -> int:
-    return int(environ[PETSTORE_PORT_ENV_KEY])
+def project_root() -> Path:
+    expected = Path(__file__).resolve().parent.parent.resolve()
+    assert expected.is_dir(), f"Expected project root to exist {expected!r}"
+    return expected
 
 
 @fixture(scope="session")
-def docker_client() -> DockerClient:
+def dotenv_path(project_root: Path) -> Path:
+    expected = project_root / ".env"
+    assert expected.is_file(), f"Expected .env file to exist {expected!r}"
+    return expected
+
+
+@fixture(scope="session")
+def dotenv(dotenv_path: Path) -> DotEnv:
+    return dotenv_values(dotenv_path)
+
+
+@fixture(scope="session")
+def secret_ninja_api_key(dotenv: DotEnv) -> str:
+    assert "NINJA_API_KEY" in dotenv
+    key = dotenv["NINJA_API_KEY"]
+    assert key
+    return key
+
+
+@fixture(scope="session")
+def petstore_port(dotenv: DotEnv) -> int:
+    assert PETSTORE_PORT_ENV_KEY in dotenv
+    port = dotenv[PETSTORE_PORT_ENV_KEY]
+    assert port
+    return int(port)
+
+
+@fixture(scope="session")
+def petstore_base_url(petstore_port: int) -> str:
+    return f"http://localhost:{petstore_port}"
+
+
+@fixture(scope="session")
+def docker_engine() -> DockerClient:
     return docker.from_env()
 
 
 @fixture(scope="session")
-def tester(docker_client: DockerClient, petstore_port: int) -> Iterator[PetStoreTester]:
-    with contextlib.suppress(Exception):
-        prev: Container = docker_client.containers.get(CONTAINER_NAME)
-        prev.kill()
-        prev.remove(force=True)
-
-    docker_client.images.build(path=".", tag="petstore-test", rm=True, forcerm=True)
-
-    container: Container = docker_client.containers.run(
-        "petstore-test",
-        detach=True,
-        name=CONTAINER_NAME,
-        remove=True,
-        auto_remove=True,
-        environment={PETSTORE_PORT_ENV_KEY: petstore_port},
-        ports={f"{petstore_port}/tcp": petstore_port},
-    )
-
-    for _ in range(60):
-        container.reload()
-        match container.attrs["State"]["Health"]["Status"]:
-            case "healthy":
-                break
-            case "unhealthy":
-                msg = "Unhealthy container"
-                raise RuntimeError(msg)
-            case _:
-                time.sleep(timedelta(milliseconds=100).total_seconds())
-    else:
-        msg = "Container did not become healthy"
-        raise RuntimeError(msg)
-
-    yield PetStoreTester(container, f"http://localhost:{petstore_port}")
-
-    with contextlib.suppress(Exception):
-        container.kill()
+def example_picture_path(project_root: Path) -> Path:
+    expected = project_root / "tests" / "res" / "1.jamie.jpg"
+    assert expected.is_file()
+    return expected
 
 
-@async_fixture
-async def client(tester: PetStoreTester) -> AsyncIterator[AsyncClient]:
-    async with AsyncClient(base_url=tester.base_url, timeout=2.0) as c:
-        yield c
+@fixture(scope="session")
+def example_picture_path2(project_root: Path) -> Path:
+    expected = project_root / "tests" / "res" / "1.jamie_after_put.jpg"
+    assert expected.is_file()
+    return expected

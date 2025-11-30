@@ -1,5 +1,6 @@
 [pytest]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = ["--import-mode=importlib"]
+addopts = ["--import-mode=importlib", "-vv"]
 strict = true
+norecursedirs = ["tests/draft"]
