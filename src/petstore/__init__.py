@@ -7,9 +7,10 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, statu
 from fastapi.exceptions import RequestValidationError
 from redis import WatchError
 from starlette.exceptions import HTTPException as InternalHTTPException
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from petstore.model import (
+    Birthdate,
     CreateNewPetRequest,
     CreatePetTypeRequest,
     PetEntity,
@@ -17,11 +18,14 @@ from petstore.model import (
     PetTypeEntity,
     PetTypeQuery,
     Picture,
+    PictureFile,
+    PutPetRequest,
 )
 from petstore.ninja import NinjaAnimals, NinjaApiError, get_ninja
 from petstore.redis import get_redis
 
 if TYPE_CHECKING:
+    from pydantic import HttpUrl
     from redis.asyncio import Redis
 
 app = FastAPI()
@@ -196,12 +200,18 @@ class PetStoreStorage:
             return None
         return Picture.model_validate_json(pic)
 
-    async def store_picture(self, picture: Picture) -> None:
+    async def ensure_picture_stored(self, picture: Picture) -> None:
         await self._backend.setnx(picture.id, picture.model_dump_json())
-        await self._backend.setnx(picture.filename, picture.id)
+        picture_filename_key = self._picture_filename_key(picture.filename)
+        # Override ok. Picture is tied to a specific pet-entity.
+        await self._backend.set(picture_filename_key, picture.id)
 
         async with await anyio.open_file(picture.filename, "wb") as f:
             await f.write(picture.content)
+
+    def _picture_filename_key(self, picture: str) -> str:
+        # Currently the key is just the filename, maybe will change if needed.
+        return picture
 
     async def get_pet(self, pet_type_id: str, pet_name: str) -> PetEntity | None:
         key = self._pet_key(type_id=pet_type_id, name=pet_name)
@@ -210,6 +220,64 @@ class PetStoreStorage:
             return None
 
         return PetEntity.model_validate_json(p)
+
+    async def delete_pet(self, type_id: str, pet: PetEntity) -> None:
+        pet_key = self._pet_key(type_id=type_id, name=pet.name)
+        picture_filename_key = self._picture_filename_key(pet.picture)
+        pet_type_key = self._pet_types_id_key(type_id)
+
+        async with self._backend.pipeline() as pipe:
+            try:
+                await pipe.watch(pet_key, picture_filename_key, pet_type_key)
+                raw_pet_type = await pipe.get(pet_type_key)
+                pet_type = PetTypeEntity.model_validate_json(raw_pet_type)
+                assert pet.name in pet_type.pets
+                pet_type.pets.remove(pet.name)
+                pipe.multi()
+                pipe.set(pet_type_key, pet_type.model_dump_json())
+                pipe.delete(picture_filename_key)
+                pipe.delete(pet_key)
+                await pipe.execute()
+            except WatchError as e:
+                raise MalformedDataError from e
+
+    async def get_picture_by_filename(self, file_name: str) -> Picture | None:
+        pic_id_key = await self._backend.get(file_name)
+        if not pic_id_key:
+            return None
+
+        pic = await self._backend.get(pic_id_key)
+        if not pic:
+            return None
+
+        return Picture.model_validate_json(pic)
+
+    async def update_pet(
+        self,
+        type_id: str,
+        old_pet: PetEntity,
+        new_pet_birthdate: Birthdate,
+        new_picture: PictureFile,
+    ) -> PetEntity:
+        """Return the updated pet entity."""
+        old_pet_key = self._pet_key(type_id=type_id, name=old_pet.name)
+        new_pet = PetEntity(
+            name=old_pet.name,
+            picture=new_picture,
+            birthdate=new_pet_birthdate,
+        )
+
+        async with self._backend.pipeline() as pipe:
+            try:
+                await pipe.watch(old_pet_key)
+                pipe.multi()
+                # Update pet
+                pipe.set(old_pet_key, new_pet.model_dump_json())
+                await pipe.execute()
+            except WatchError as e:
+                raise MalformedDataError from e
+            else:
+                return new_pet
 
 
 PetStoreStorageDI = Annotated[PetStoreStorage, Depends(PetStoreStorage.get)]
@@ -354,6 +422,26 @@ async def force_clear(backend: PetStoreStorageDI) -> None:
     await backend.clear()
 
 
+async def download_new_image(
+    picture_url: HttpUrl,
+    storage_api: PetStoreStorage,
+    ninja_api: NinjaAnimals,
+    pet_name: str,
+    pet_type: str,
+) -> str:
+    """Return the generated filename."""
+    url = picture_url.encoded_string()
+    pic = await storage_api.get_picture_by_url(url=url)
+    if not pic:
+        pic = await ninja_api.get_picture_for_pet(
+            picture_url=url,
+            pet_name=pet_name,
+            pet_type=pet_type,
+        )
+    await storage_api.ensure_picture_stored(pic)
+    return pic.filename
+
+
 @app.post(PetStoreResource.PET_TYPE_ID_PETS, status_code=status.HTTP_201_CREATED)
 async def post_new_pet_to_type(
     type_id: str,
@@ -366,17 +454,14 @@ async def post_new_pet_to_type(
         raise NotFoundError
     picture_filename = "NA"
     if request.picture_url:
-        url = request.picture_url.encoded_string()
-        pic = await storage_api.get_picture_by_url(url=url)
-        if not pic:
-            pic = await ninja_api.get_picture_for_pet(
-                picture_url=url,
-                pet_name=request.name,
-                pet_type=pet_type.id,
-            )
-            await storage_api.store_picture(pic)
-        picture_filename = pic.filename
-
+        picture_filename = await download_new_image(
+            picture_url=request.picture_url,
+            storage_api=storage_api,
+            ninja_api=ninja_api,
+            pet_type=pet_type.id,
+            pet_name=request.name,
+        )
+        assert picture_filename != "NA"
     return await storage_api.create_new_pet(
         pet_type=pet_type,
         pet_name=request.name,
@@ -415,3 +500,74 @@ async def get_pets_for_pet_type(
         items = [pet for pet in items if pet.is_birthdate_lt(threshold)]
 
     return items
+
+
+@app.get(PetStoreResource.PET_TYPE_ID_PETS_NAME, status_code=status.HTTP_200_OK)
+async def get_pet(
+    type_id: str,
+    name: str,
+    backend: PetStoreStorageDI,
+) -> PetEntity:
+    pet = await backend.get_pet(type_id, name)
+    if not pet:
+        raise NotFoundError
+    return pet
+
+
+@app.delete(
+    PetStoreResource.PET_TYPE_ID_PETS_NAME, status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_pet(type_id: str, name: str, backend: PetStoreStorageDI) -> None:
+    pet = await backend.get_pet(type_id, name)
+    if not pet:
+        raise NotFoundError
+
+    await backend.delete_pet(type_id=type_id, pet=pet)
+
+
+@app.get(PetStoreResource.PICTURES, status_code=status.HTTP_200_OK)
+async def get_pictures(file_name: str, backend: PetStoreStorageDI) -> Response:
+    pic = await backend.get_picture_by_filename(file_name)
+    if not pic:
+        raise NotFoundError
+    return Response(
+        content=pic.content,
+        media_type=pic.type,
+    )
+
+
+@app.put(PetStoreResource.PET_TYPE_ID_PETS_NAME, status_code=status.HTTP_200_OK)
+async def put_on_existing_pet(
+    type_id: str,
+    name: str,
+    backend: PetStoreStorageDI,
+    ninja_api: NinjaApiDI,
+    payload: Annotated[PutPetRequest, Body()],
+) -> PetEntity:
+    old_pet = await backend.get_pet(type_id, name)
+    if not old_pet:
+        raise NotFoundError
+
+    if payload.name != name:
+        raise NotFoundError
+
+    new_birthdate = "NA"
+    if payload.birthdate:
+        new_birthdate = payload.birthdate
+
+    new_picture_filename = "NA"
+    if payload.picture_url:
+        new_picture_filename = await download_new_image(
+            picture_url=payload.picture_url,
+            storage_api=backend,
+            ninja_api=ninja_api,
+            pet_name=payload.name,
+            pet_type=type_id,
+        )
+        assert new_picture_filename != "NA"
+    return await backend.update_pet(
+        type_id=type_id,
+        old_pet=old_pet,
+        new_pet_birthdate=new_birthdate,
+        new_picture=new_picture_filename,
+    )

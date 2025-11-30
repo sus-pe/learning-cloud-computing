@@ -14,6 +14,7 @@ classifiers = [
 dependencies = [
   "anyio>=4.11",
   "fastapi",
+  "pillow>=12",
   "python-dotenv>=1.2.1",
   "redis>=7.1",
   "uvicorn",

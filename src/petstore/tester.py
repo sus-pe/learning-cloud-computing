@@ -1,18 +1,56 @@
+import mimetypes
+from io import BytesIO
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from httpx import AsyncClient, Response, codes
+from PIL import Image, ImageChops
 
-from petstore import PetEntity, PetStoreResource, PetTypeEntity
+from petstore import CreateNewPetRequest, PetEntity, PetStoreResource, PetTypeEntity
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from docker.models.containers import Container
 
 
 class PetStoreTester:
     codes = codes
 
-    def __init__(self, client: AsyncClient) -> None:
+    def __init__(
+        self,
+        client: AsyncClient,
+        example_picture_path: Path,
+        example_picture_path2: Path,
+    ) -> None:
         self.client = client
+        self._example_picture_path = example_picture_path
+        self._example_picture_path2 = example_picture_path2
+
+    @property
+    def example_picture_bytes(self) -> bytes:
+        with self.example_picture_path.open("rb") as f:
+            return f.read()
+
+    @property
+    def example_picture_path(self) -> Path:
+        return self._example_picture_path
+
+    @property
+    def example_picture_path2(self) -> Path:
+        return self._example_picture_path2
+
+    @property
+    def example_picture_url(self) -> str:
+        return "https://api-ninjas.com/images/dogs/golden_retriever.jpg"
+
+    @property
+    def example_picture_bytes2(self) -> bytes:
+        with self.example_picture_path2.open("rb") as f:
+            return f.read()
+
+    @property
+    def example_picture_url2(self) -> str:
+        return "https://api-ninjas.com/images/dogs/siberian_husky.jpg"
 
     @property
     def example_pet(self) -> PetEntity:
@@ -42,6 +80,12 @@ class PetStoreTester:
         return await self.client.get(
             PetStoreResource.PET_TYPE_ID.format(type_id=type_id)
         )
+
+    async def get_pet_type(self, type_id: str) -> PetTypeEntity:
+        r = await self.client.get(PetStoreResource.PET_TYPE_ID.format(type_id=type_id))
+        self.assert_ok(r)
+        body = self.assert_json(r, dict)
+        return PetTypeEntity.model_validate(body)
 
     async def unsafe_post_pet(
         self,
@@ -83,10 +127,18 @@ class PetStoreTester:
             PetStoreResource.PET_TYPE_ID.format(type_id), json=json
         )
 
-    async def get_pet(self, type_id: str, pet_name: str) -> Response:
+    async def unsafe_get_pet(self, type_id: str, pet_name: str) -> Response:
         return await self.client.get(
-            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(id=type_id, name=pet_name)
+            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(
+                type_id=type_id, name=pet_name
+            )
         )
+
+    async def get_pet(self, type_id: str, pet_name: str) -> PetEntity:
+        r = await self.unsafe_get_pet(type_id=type_id, pet_name=pet_name)
+        self.assert_ok(r)
+        body = self.assert_json(r, dict)
+        return PetEntity.model_validate(body)
 
     async def get_pet_types(
         self,
@@ -107,34 +159,9 @@ class PetStoreTester:
         body = self.assert_json(r, list)
         return [PetTypeEntity.model_validate(p) for p in body]
 
-    async def get_picture(self, file_name: str) -> Response:
-        return await self.client.get(PetStoreResource.PICTURES.format(file_name))
-
-    async def delete_pet(self, type_id: str, pet_name: str) -> Response:
-        return await self.client.delete(
-            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(id=type_id, name=pet_name)
-        )
-
-    async def put_pet(
-        self, type_id: str, pet_name: str, *, json: dict | None = None
-    ) -> Response:
-        return await self.client.put(
-            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(id=type_id, name=pet_name),
-            json=json,
-        )
-
-    async def put_pet_raw(
-        self,
-        type_id: str,
-        pet_name: str,
-        *,
-        raw_content: bytes,
-        content_type: str,
-    ) -> Response:
-        return await self.client.put(
-            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(id=type_id, name=pet_name),
-            content=raw_content,
-            headers={"content-type": content_type},
+    async def unsafe_get_picture(self, file_name: str) -> Response:
+        return await self.client.get(
+            PetStoreResource.PICTURES.format(file_name=file_name)
         )
 
     def assert_status(self, r: Response, expected: int) -> None:
@@ -159,19 +186,10 @@ class PetStoreTester:
 
     T = TypeVar("T")
 
-    def require_key(self, obj: dict[str, Any], key: str, typ: type[T]) -> T:
-        assert key in obj, f"Missing key {key!r} in JSON object {obj!r}"
-        value = obj[key]
-        msg = (
-            f"Key {key!r} expected {typ.__name__}, "
-            f"got {type(value).__name__}: {value!r}"
-        )
-        assert isinstance(value, typ), msg
-        return value
-
     def assert_error(self, r: Response, msg: str) -> None:
         body = self.assert_json(r, dict)
-        assert msg in body.get("error", None)
+        assert "error" in body
+        assert msg in body.get("error")
 
     def assert_malformed(self, r: Response) -> None:
         self.assert_status(r, self.codes.BAD_REQUEST)
@@ -272,6 +290,16 @@ class PetStoreTester:
         body = self.assert_json(r, list)
         return [PetEntity.model_validate(p) for p in body]
 
+    async def post_new_pet_request(
+        self, pet_type: str, request: CreateNewPetRequest
+    ) -> PetEntity:
+        return await self.post_new_pet(
+            pet_type=pet_type,
+            pet_name=request.name,
+            birthdate=request.birthdate,
+            picture_url=request.picture_url.encoded_string(),
+        )
+
     async def post_new_pet(
         self,
         pet_type: str,
@@ -292,10 +320,65 @@ class PetStoreTester:
     async def post_dummy_pet(self, pet_type: str) -> PetEntity:
         return await self.post_new_pet(pet_type, pet_name="dummy-name")
 
+    async def unsafe_delete_pet(self, type_id: str, pet_name: str) -> Response:
+        return await self.client.delete(
+            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(
+                type_id=type_id, name=pet_name
+            ),
+        )
+
+    def assert_equal_images(self, img1: bytes, img2: bytes) -> None:
+        pillow_img1 = Image.open(BytesIO(img1)).convert("RGBA")
+        pillow_img2 = Image.open(BytesIO(img2)).convert("RGBA")
+
+        assert pillow_img1.size == pillow_img2.size
+
+        diff = ImageChops.difference(pillow_img1, pillow_img2)
+        assert diff.getbbox() is None
+
+    async def unsafe_put_pet(
+        self,
+        type_id: str,
+        pet_name: str,
+        birthdate: str | None = None,
+        picture_url: str | None = None,
+    ) -> Response:
+        payload = {"name": pet_name}
+        if birthdate:
+            payload["birthdate"] = birthdate
+        if picture_url:
+            payload["picture-url"] = picture_url
+
+        return await self.client.put(
+            PetStoreResource.PET_TYPE_ID_PETS_NAME.format(
+                type_id=type_id, name=pet_name
+            ),
+            json=payload,
+        )
+
+    async def get_picture(self, picture_filename: str) -> bytes:
+        r = await self.unsafe_get_picture(picture_filename)
+        self.assert_ok(r)
+        content_type = r.headers["content-type"]
+        expected_content_type, _ = mimetypes.guess_file_type(picture_filename)
+        assert expected_content_type == content_type
+        assert r.content
+        return r.content
+
 
 class PetStoreContainerTester(PetStoreTester):
-    def __init__(self, container: Container, client: AsyncClient) -> None:
-        super().__init__(client)
+    def __init__(
+        self,
+        container: Container,
+        client: AsyncClient,
+        example_picture_path: Path,
+        example_picture_path2: Path,
+    ) -> None:
+        super().__init__(
+            client,
+            example_picture_path=example_picture_path,
+            example_picture_path2=example_picture_path2,
+        )
         self.container = container
 
     def get_picture_mtime(self, file_name: str) -> float:

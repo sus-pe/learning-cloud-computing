@@ -57,3 +57,17 @@ def petstore_base_url(petstore_port: int) -> str:
 @fixture(scope="session")
 def docker_engine() -> DockerClient:
     return docker.from_env()
+
+
+@fixture(scope="session")
+def example_picture_path(project_root: Path) -> Path:
+    expected = project_root / "tests" / "res" / "1.jamie.jpg"
+    assert expected.is_file()
+    return expected
+
+
+@fixture(scope="session")
+def example_picture_path2(project_root: Path) -> Path:
+    expected = project_root / "tests" / "res" / "1.jamie_after_put.jpg"
+    assert expected.is_file()
+    return expected

@@ -48,8 +48,16 @@ def _petstore_container(
 
 @fixture
 async def tester(
-    _petstore_container: Container, petstore_base_url: str
+    _petstore_container: Container,
+    petstore_base_url: str,
+    example_picture_path: Path,
+    example_picture_path2: Path,
 ) -> AsyncGenerator[PetStoreContainerTester, Any]:
     async with AsyncClient(base_url=petstore_base_url, timeout=2.0) as client:
         await client.post("/force-clear")
-        yield PetStoreContainerTester(_petstore_container, client)
+        yield PetStoreContainerTester(
+            _petstore_container,
+            client,
+            example_picture_path,
+            example_picture_path2=example_picture_path2,
+        )

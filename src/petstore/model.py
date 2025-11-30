@@ -25,7 +25,7 @@ class Picture(BaseModel):
     type: str
     filename: str
     content: bytes
-    model_config = ConfigDict(ser_json_bytes="base64")
+    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
 
 
 class PetStoreModel(BaseModel):
@@ -136,3 +136,9 @@ class PetsQuery(PetStoreModel):
 class PetTypeQuery(PetStoreModel, extra="allow"):
     family: str | None = None
     attrs: list[str] | None = Field(None, alias="hasAttribute")
+
+
+class PutPetRequest(PetStoreModel):
+    name: str
+    birthdate: str | None = None
+    picture_url: HttpUrl | None = Field(None, alias="picture-url")

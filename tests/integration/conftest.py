@@ -58,8 +58,14 @@ async def petstore_server(
 async def tester(
     petstore_server: AsyncClient,
     redis_container: Container,  # noqa: ARG001
+    example_picture_path: Path,
+    example_picture_path2: Path,
 ) -> PetStoreTester:
     # Refresh the persistent shared fixture that is redis.
     redis = get_redis()
     await redis.flushall()
-    return PetStoreTester(petstore_server)
+    return PetStoreTester(
+        petstore_server,
+        example_picture_path=example_picture_path,
+        example_picture_path2=example_picture_path2,
+    )
