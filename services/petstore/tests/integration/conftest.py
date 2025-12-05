@@ -2,10 +2,8 @@ from typing import TYPE_CHECKING, Any
 
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
-
-from petstore import app, get_redis
+from petstore import NinjaAnimals, app, get_redis
 from petstore.docker import run_container
-from petstore.ninja import NinjaAnimals
 from petstore.tester import PetStoreTester
 
 if TYPE_CHECKING:
@@ -15,7 +13,7 @@ if TYPE_CHECKING:
     from docker import DockerClient
     from docker.models.containers import Container
 
-    from tests.conftest import PersistentFixture
+    from services.petstore.tests.conftest import PersistentFixture
 
 from pytest import fixture
 

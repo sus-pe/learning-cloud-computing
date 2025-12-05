@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from petstore import PetEntity, PetStoreResource, PetTypeEntity
 
 if TYPE_CHECKING:
-    from petstore.tester import PetStoreTester
+    from petstore import PetStoreTester
 
 
 async def test_post_pet_type_creates_new_type(tester: PetStoreTester) -> None:

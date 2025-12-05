@@ -1,11 +1,6 @@
-[build-system]
-build-backend = "uv_build"
-requires = [ "uv-build" ]
-
 [project]
-name = "petstore"
+name = "petstore-orders"
 version = "0.1.0"
-description = "Pet Store API"
 requires-python = ">=3.14"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
@@ -15,12 +10,11 @@ dependencies = [
   "anyio>=4.11",
   "fastapi",
   "pillow>=12",
+  "pymongo>=4.15.4",
   "python-dotenv>=1.2.1",
   "redis>=7.1",
   "uvicorn",
 ]
-
-scripts.petstore = "petstore.__main__:main"
 
 [dependency-groups]
 dev = [
@@ -32,6 +26,9 @@ dev = [
   "requests>=2.32.5",
   "ruff",
   "ty>=0.0.1a27",
+]
+internal = [
+  "petstore",
 ]
 
 [tool.ruff]
@@ -55,5 +52,11 @@ lint.ignore = [
 ]
 lint.fixable = [ "ALL" ]
 
+[tool.uv.sources]
+petstore = { workspace = true }
+
+[tool.uv.workspace]
+members = [ "services/*" ]
+
 [tool.uv]
-default-groups = [ "dev" ]
+default-groups = [ "dev", "internal" ]

@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
 
 from httpx import AsyncClient
-from pytest import fixture
-
+from petstore.docker import run_container
 from petstore.tester import PetStoreContainerTester
+from pytest import fixture
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Generator
@@ -12,29 +12,33 @@ if TYPE_CHECKING:
     from docker import DockerClient
     from docker.models.containers import Container
 
-    from tests.conftest import DotEnv
+    from services.petstore.tests.conftest import DotEnv
 
 from typing import Any
-
-from petstore.docker import run_container
 
 CONTAINER_NAME: str = "petstore-test-container"
 
 
 @fixture(scope="session")
-def dockerfile(project_root: Path) -> Path:
-    expected = project_root / "Dockerfile"
-    assert expected.is_file(), f"Expected Dockerfile to exist {expected!r}"
+def petstore_dockerfile(project_root: Path) -> Path:
+    expected = project_root / "petstore.Dockerfile"
+    assert expected.is_file(), f"Expected petstore.Dockerfile to exist {expected!r}"
     return expected
 
 
 @fixture(scope="package")
 def _petstore_container(
-    docker_engine: DockerClient, petstore_port: int, dockerfile: Path, dotenv: DotEnv
+    docker_engine: DockerClient,
+    petstore_port: int,
+    petstore_dockerfile: Path,
+    dotenv: DotEnv,
 ) -> Generator[Container, Any]:
     image = "petstore-test"
     docker_engine.images.build(
-        path=str(dockerfile.parent), tag=image, rm=True, forcerm=True
+        path=str(petstore_dockerfile.parent),
+        dockerfile=str(petstore_dockerfile.name),
+        tag=image,
+        rm=True,
     )
 
     yield from run_container(

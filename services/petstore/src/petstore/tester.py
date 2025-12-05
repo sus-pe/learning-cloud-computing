@@ -293,11 +293,12 @@ class PetStoreTester:
     async def post_new_pet_request(
         self, pet_type: str, request: CreateNewPetRequest
     ) -> PetEntity:
+        url = request.picture_url.encoded_string() if request.picture_url else None
         return await self.post_new_pet(
             pet_type=pet_type,
             pet_name=request.name,
             birthdate=request.birthdate,
-            picture_url=request.picture_url.encoded_string(),
+            picture_url=url,
         )
 
     async def post_new_pet(

@@ -16,14 +16,21 @@ pytest.register_assert_rewrite("petstore.tester")
 
 @fixture(scope="session")
 def project_root() -> Path:
-    expected = Path(__file__).resolve().parent.parent.resolve()
+    expected = Path(__file__).resolve().parent.parent.parent.parent.resolve()
     assert expected.is_dir(), f"Expected project root to exist {expected!r}"
     return expected
 
 
 @fixture(scope="session")
-def dotenv_path(project_root: Path) -> Path:
-    expected = project_root / ".env"
+def petstore_root(project_root: Path) -> Path:
+    expected = project_root / "services" / "petstore"
+    assert expected.is_dir(), f"Expected petstore root directory to exist {expected!r}"
+    return expected
+
+
+@fixture(scope="session")
+def dotenv_path(petstore_root: Path) -> Path:
+    expected = petstore_root / ".env"
     assert expected.is_file(), f"Expected .env file to exist {expected!r}"
     return expected
 
@@ -60,14 +67,14 @@ def docker_engine() -> DockerClient:
 
 
 @fixture(scope="session")
-def example_picture_path(project_root: Path) -> Path:
-    expected = project_root / "tests" / "res" / "1.jamie.jpg"
+def example_picture_path(petstore_root: Path) -> Path:
+    expected = petstore_root / "tests" / "res" / "1.jamie.jpg"
     assert expected.is_file()
     return expected
 
 
 @fixture(scope="session")
-def example_picture_path2(project_root: Path) -> Path:
-    expected = project_root / "tests" / "res" / "1.jamie_after_put.jpg"
+def example_picture_path2(petstore_root: Path) -> Path:
+    expected = petstore_root / "tests" / "res" / "1.jamie_after_put.jpg"
     assert expected.is_file()
     return expected
