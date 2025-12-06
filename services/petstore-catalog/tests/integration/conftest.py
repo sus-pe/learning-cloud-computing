@@ -2,9 +2,9 @@ from typing import TYPE_CHECKING, Any
 
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
-from petstore import NinjaAnimals, app, get_redis
-from petstore.docker import run_container
-from petstore.tester import PetStoreTester
+from petstore_catalog import NinjaAnimals, app, get_redis
+from petstore_catalog.docker import run_container
+from petstore_catalog.tester import PetStoreTester
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
     from docker import DockerClient
     from docker.models.containers import Container
-
     from services.petstore.tests.conftest import PersistentFixture
 
 from pytest import fixture

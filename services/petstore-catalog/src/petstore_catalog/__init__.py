@@ -9,7 +9,7 @@ from redis import WatchError
 from starlette.exceptions import HTTPException as InternalHTTPException
 from starlette.responses import JSONResponse, Response
 
-from petstore.model import (
+from petstore_catalog.model import (
     Birthdate,
     CreateNewPetRequest,
     CreatePetTypeRequest,
@@ -21,8 +21,8 @@ from petstore.model import (
     PictureFile,
     PutPetRequest,
 )
-from petstore.ninja import NinjaAnimals, NinjaApiError, get_ninja
-from petstore.redis import get_redis
+from petstore_catalog.ninja import NinjaAnimals, NinjaApiError, get_ninja
+from petstore_catalog.redis import get_redis
 
 if TYPE_CHECKING:
     from pydantic import HttpUrl

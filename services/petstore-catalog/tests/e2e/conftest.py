@@ -1,8 +1,8 @@
 from typing import TYPE_CHECKING
 
 from httpx import AsyncClient
-from petstore.docker import run_container
-from petstore.tester import PetStoreContainerTester
+from petstore_catalog.docker import run_container
+from petstore_catalog.tester import PetStoreContainerTester
 from pytest import fixture
 
 if TYPE_CHECKING:
@@ -11,18 +11,19 @@ if TYPE_CHECKING:
 
     from docker import DockerClient
     from docker.models.containers import Container
-
     from services.petstore.tests.conftest import DotEnv
 
 from typing import Any
 
-CONTAINER_NAME: str = "petstore-test-container"
+CONTAINER_NAME: str = "petstore_catalog-catalog-test-container"
 
 
 @fixture(scope="session")
 def petstore_dockerfile(project_root: Path) -> Path:
-    expected = project_root / "petstore.Dockerfile"
-    assert expected.is_file(), f"Expected petstore.Dockerfile to exist {expected!r}"
+    expected = project_root / "petstore_catalog-catalog-catalog.Dockerfile"
+    assert expected.is_file(), (
+        f"Expected petstore_catalog-catalog-catalog.Dockerfile to exist {expected!r}"
+    )
     return expected
 
 
@@ -33,7 +34,7 @@ def _petstore_container(
     petstore_dockerfile: Path,
     dotenv: DotEnv,
 ) -> Generator[Container, Any]:
-    image = "petstore-test"
+    image = "petstore_catalog-catalog-test"
     docker_engine.images.build(
         path=str(petstore_dockerfile.parent),
         dockerfile=str(petstore_dockerfile.name),

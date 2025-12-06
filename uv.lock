@@ -4,8 +4,8 @@ requires-python = ">=3.14"
 
 [manifest]
 members = [
-    "petstore",
-    "petstore-orders",
+    "petstore-catalog",
+    "petstore-chain",
 ]
 
 [[package]]
@@ -242,12 +242,12 @@ wheels = [
 ]
 
 [[package]]
-name = "petstore"
+name = "petstore-catalog"
 version = "0.1.0"
-source = { editable = "services/petstore" }
+source = { editable = "services/petstore-catalog" }
 
 [[package]]
-name = "petstore-orders"
+name = "petstore-chain"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
@@ -272,7 +272,7 @@ dev = [
     { name = "ty" },
 ]
 internal = [
-    { name = "petstore" },
+    { name = "petstore-catalog" },
 ]
 
 [package.metadata]
@@ -297,7 +297,7 @@ dev = [
     { name = "ruff" },
     { name = "ty", specifier = ">=0.0.1a27" },
 ]
-internal = [{ name = "petstore", editable = "services/petstore" }]
+internal = [{ name = "petstore-catalog", editable = "services/petstore-catalog" }]
 
 [[package]]
 name = "pillow"

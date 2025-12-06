@@ -1,18 +1,17 @@
 services:
-  petstore1:
-    build: .
-    ports:
-      - "5001:5001"
-    env_file:
-      - services/petstore/.env
-  petstore2:
-    build: .
-    ports:
-      - "5001:5001"
-    env_file:
-      - services/petstore/.env
-  orders:
+  petstore-catalog:
+    image: petstore-catalog
     build:
+      dockerfile: petstore-catalog.Dockerfile
+    env_file:
+      - services/petstore-catalog/.env
+    deploy:
+      replicas: 2
+
+  petstore-orders:
+    image: petstore-orders
+    build:
+      dockerfile: petstore-orders.Dockerfile
   load-balancer:
     image: nginx
   storage:

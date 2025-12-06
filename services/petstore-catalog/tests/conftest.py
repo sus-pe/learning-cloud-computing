@@ -11,7 +11,7 @@ type DotEnv = dict[str, str | None]
 type PersistentFixture[T] = Generator[T]
 
 PETSTORE_PORT_ENV_KEY: str = "PETSTORE_PORT"
-pytest.register_assert_rewrite("petstore.tester")
+pytest.register_assert_rewrite("petstore_catalog-catalog.tester")
 
 
 @fixture(scope="session")
@@ -23,8 +23,10 @@ def project_root() -> Path:
 
 @fixture(scope="session")
 def petstore_root(project_root: Path) -> Path:
-    expected = project_root / "services" / "petstore"
-    assert expected.is_dir(), f"Expected petstore root directory to exist {expected!r}"
+    expected = project_root / "services" / "petstore_catalog-catalog"
+    assert expected.is_dir(), (
+        f"Expected petstore_catalog-catalog root directory to exist {expected!r}"
+    )
     return expected
 
 

@@ -1,5 +1,5 @@
 [project]
-name = "petstore-orders"
+name = "petstore-chain"
 version = "0.1.0"
 requires-python = ">=3.14"
 classifiers = [
@@ -28,7 +28,7 @@ dev = [
   "ty>=0.0.1a27",
 ]
 internal = [
-  "petstore",
+  "petstore-catalog",
 ]
 
 [tool.ruff]
@@ -53,7 +53,7 @@ lint.ignore = [
 lint.fixable = [ "ALL" ]
 
 [tool.uv.sources]
-petstore = { workspace = true }
+petstore-catalog = { workspace = true }
 
 [tool.uv.workspace]
 members = [ "services/*" ]

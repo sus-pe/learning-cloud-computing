@@ -3,7 +3,7 @@ build-backend = "uv_build"
 requires = [ "uv-build" ]
 
 [project]
-name = "petstore"
+name = "petstore-catalog"
 version = "0.1.0"
 description = "Pet Store API"
 requires-python = ">=3.14"

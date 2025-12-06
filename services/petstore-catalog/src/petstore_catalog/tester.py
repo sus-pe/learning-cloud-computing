@@ -5,7 +5,12 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from httpx import AsyncClient, Response, codes
 from PIL import Image, ImageChops
 
-from petstore import CreateNewPetRequest, PetEntity, PetStoreResource, PetTypeEntity
+from petstore_catalog import (
+    CreateNewPetRequest,
+    PetEntity,
+    PetStoreResource,
+    PetTypeEntity,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from petstore import NinjaAnimals
+    from petstore_catalog import NinjaAnimals
 
 EXPECTED_CHEETAH = [
     {

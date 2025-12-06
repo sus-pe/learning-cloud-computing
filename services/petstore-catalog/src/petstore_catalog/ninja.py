@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from httpx import AsyncClient, AsyncHTTPTransport, Response, Timeout
 
-from petstore.model import Picture
+from petstore_catalog.model import Picture
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

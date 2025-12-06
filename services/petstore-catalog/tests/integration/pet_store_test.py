@@ -1,10 +1,10 @@
 import mimetypes
 from typing import TYPE_CHECKING
 
-from petstore import PetEntity, PetStoreResource, PetTypeEntity
+from petstore_catalog import PetEntity, PetStoreResource, PetTypeEntity
 
 if TYPE_CHECKING:
-    from petstore import PetStoreTester
+    from petstore_catalog import PetStoreTester
 
 
 async def test_post_pet_type_creates_new_type(tester: PetStoreTester) -> None:
