@@ -1,3 +1,6 @@
+volumes:
+  petstore-redis:
+
 services:
   petstore1:
     image: petstore
@@ -6,12 +9,30 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      REDIS_URL: "redis://petstore-redis:6379/0"
     ports:
       - "5001:8000"
+    depends_on:
+      - petstore-redis
+    restart: always
+    networks:
+      - petnet
+  petstore-redis:
+    image: petstore-redis
+    build:
+      context: .
+      dockerfile: redis.Dockerfile
+    restart: always
+    volumes:
+      - petstore-redis:/data
     networks:
       - petnet
   petstore2:
     image: petstore
+    restart: always
+    depends_on:
+      - petstore-redis
     env_file:
       - .env
     build:
@@ -21,8 +42,11 @@ services:
       - "5002:8000"
     networks:
       - petnet
+    environment:
+      REDIS_URL: "redis://petstore-redis:6379/1"
   nginx:
     image: nginx:alpine
+    restart: always
     depends_on:
       - petstore1
       - petstore2

@@ -1,3 +1,4 @@
+import os
 import re
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any
@@ -571,3 +572,8 @@ async def put_on_existing_pet(
         new_pet_birthdate=new_birthdate,
         new_picture=new_picture_filename,
     )
+
+
+@app.get("/kill")
+def kill_container() -> None:
+    os._exit(1)
