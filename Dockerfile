@@ -4,11 +4,6 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-install-project
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        redis-server=* \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY src ./src
 RUN uv sync --frozen
 
