@@ -20,7 +20,7 @@ dependencies = [
   "uvicorn",
 ]
 
-scripts.petstore = "petstore.__main__:main"
+scripts.petstore = "petstore:main"
 
 [dependency-groups]
 dev = [

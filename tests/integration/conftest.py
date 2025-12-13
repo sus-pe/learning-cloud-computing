@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
 
 from petstore import app, get_redis
-from petstore.docker import run_container
-from petstore.ninja import NinjaAnimals
-from petstore.tester import PetStoreTester
+from petstore import run_container
+from petstore import NinjaAnimals
+from petstore import PetStoreTester
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

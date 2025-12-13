@@ -15,7 +15,7 @@ def start_api() -> subprocess.Popen:
             "uv",
             "run",
             "uvicorn",
-            "petstore:app",
+            "petstore.orders.api:app",
             "--host",
             "0.0.0.0",  # noqa: S104
             "--port",

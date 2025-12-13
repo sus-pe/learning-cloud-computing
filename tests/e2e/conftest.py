@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from httpx import AsyncClient
 from pytest import fixture
 
-from petstore.tester import PetStoreContainerTester
+from petstore import PetStoreContainerTester
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Generator
@@ -16,15 +16,15 @@ if TYPE_CHECKING:
 
 from typing import Any
 
-from petstore.docker import run_container
+from petstore import run_container
 
 CONTAINER_NAME: str = "petstore-test-container"
 
 
 @fixture(scope="session")
 def dockerfile(project_root: Path) -> Path:
-    expected = project_root / "Dockerfile"
-    assert expected.is_file(), f"Expected Dockerfile to exist {expected!r}"
+    expected = project_root / "petstore.Dockerfile"
+    assert expected.is_file(), f"Expected petstore.Dockerfile to exist {expected!r}"
     return expected
 
 

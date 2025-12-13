@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from petstore import CreateNewPetRequest, PetEntity, PetTypeEntity
 
 if TYPE_CHECKING:
-    from petstore.tester import PetStoreTester
+    from petstore import PetStoreTester
 
 GOLDY = PetEntity(name="goldy", birthdate="21-01-1984", picture="1.goldy.png")
 GOLDY_REQUEST = CreateNewPetRequest.model_validate(

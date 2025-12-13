@@ -1,14 +1,55 @@
 volumes:
   petstore-redis:
+  petorders-redis:
 
 services:
+  petorders1:
+    image: petorders
+    restart: always
+    depends_on:
+      - petorders-redis
+      - petstore1
+      - petstore2
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: "redis://petorders-redis:6379/0"
+    ports:
+      - "5003:8000"
+    build:
+      context: .
+      dockerfile: petstore.Dockerfile
+      args:
+        SERVICE: "orders"
+    networks:
+      - petnet
+  petorders2:
+    image: petorders
+    restart: always
+    depends_on:
+      - petorders-redis
+      - petstore1
+      - petstore2
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: "redis://petorders-redis:6379/0"
+    build:
+      context: .
+      dockerfile: petstore.Dockerfile
+      args:
+        SERVICE: "orders"
+    networks:
+      - petnet
   petstore1:
     image: petstore
     env_file:
       - .env
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: petstore.Dockerfile
+      args:
+        SERVICE: "store"
     environment:
       REDIS_URL: "redis://petstore-redis:6379/0"
     ports:
@@ -28,6 +69,16 @@ services:
       - petstore-redis:/data
     networks:
       - petnet
+  petorders-redis:
+    image: petstore-redis
+    build:
+      context: .
+      dockerfile: redis.Dockerfile
+    restart: always
+    volumes:
+      - petorders-redis:/data
+    networks:
+      - petnet
   petstore2:
     image: petstore
     restart: always
@@ -37,7 +88,9 @@ services:
       - .env
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: petstore.Dockerfile
+      args:
+        SERVICE: "store"
     ports:
       - "5002:8000"
     networks:
@@ -50,6 +103,8 @@ services:
     depends_on:
       - petstore1
       - petstore2
+      - petorders1
+      - petorders2
     networks:
       - petnet
     volumes:

@@ -10,4 +10,6 @@ RUN uv sync --frozen
 HEALTHCHECK --interval=3s --timeout=2s --start-period=3s --retries=10 \
   CMD curl --fail http://localhost:$PETSTORE_PORT/ || exit 1
 
+ARG SERVICE
+ENV SERVICE=$SERVICE
 CMD ["uv", "run", "petstore"]
