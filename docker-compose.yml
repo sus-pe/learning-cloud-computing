@@ -1,0 +1,37 @@
+services:
+  petstore1:
+    image: petstore
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5001:8000"
+    networks:
+      - petnet
+  petstore2:
+    image: petstore
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5002:8000"
+    networks:
+      - petnet
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - petstore1
+      - petstore2
+    networks:
+      - petnet
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+networks:
+  petnet:
+    driver: bridge

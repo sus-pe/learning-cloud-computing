@@ -283,7 +283,7 @@ class PetStoreStorage:
 PetStoreStorageDI = Annotated[PetStoreStorage, Depends(PetStoreStorage.get)]
 
 
-@app.get("/")
+@app.get("/", status_code=status.HTTP_200_OK)
 async def root() -> None:
     pass
 
