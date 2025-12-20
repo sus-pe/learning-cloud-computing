@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from petstore import CreateNewPetRequest, PetEntity, PetTypeEntity
+from petstore.store.model import CreateNewPetRequest, PetEntity, PetTypeEntity
 
 if TYPE_CHECKING:
     from petstore import PetStoreTester

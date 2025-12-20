@@ -1,7 +1,8 @@
 import mimetypes
 from typing import TYPE_CHECKING
 
-from petstore import PetEntity, PetStoreResource, PetTypeEntity
+from petstore.store.api import PetStoreResource
+from petstore.store.model import PetEntity, PetTypeEntity
 
 if TYPE_CHECKING:
     from petstore import PetStoreTester

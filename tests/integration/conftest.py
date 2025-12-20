@@ -3,10 +3,11 @@ from typing import TYPE_CHECKING, Any
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
 
-from petstore import app, get_redis
-from petstore import run_container
-from petstore import NinjaAnimals
-from petstore import PetStoreTester
+from petstore.store.api import app
+from petstore.store.docker import run_container
+from petstore.store.ninja import NinjaAnimals
+from petstore.store.redis import get_redis
+from petstore.store.tester import PetStoreTester
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

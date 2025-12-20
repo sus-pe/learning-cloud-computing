@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING
 from httpx import AsyncClient
 from pytest import fixture
 
-from petstore import PetStoreContainerTester
+from petstore.store.docker import run_container
+from petstore.store.tester import PetStoreContainerTester
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Generator
@@ -15,8 +16,6 @@ if TYPE_CHECKING:
     from tests.conftest import DotEnv
 
 from typing import Any
-
-from petstore import run_container
 
 CONTAINER_NAME: str = "petstore-test-container"
 

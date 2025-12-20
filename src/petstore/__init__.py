@@ -10,8 +10,11 @@ def main() -> None:
 
     assert service in {"orders", "store"}
     match service:
-        case "orders": orders_main()
-        case "store": store_main()
+        case "orders":
+            orders_main()
+        case "store":
+            store_main()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

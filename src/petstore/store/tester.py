@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from httpx import AsyncClient, Response, codes
 from PIL import Image, ImageChops
 
-from petstore import CreateNewPetRequest, PetEntity, PetStoreResource, PetTypeEntity
+from petstore.store.api import PetStoreResource
+from petstore.store.model import CreateNewPetRequest, PetEntity, PetTypeEntity
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -13,68 +14,11 @@ if TYPE_CHECKING:
     from docker.models.containers import Container
 
 
-class PetStoreTester:
+class PetStoreClient:
     codes = codes
 
-    def __init__(
-        self,
-        client: AsyncClient,
-        example_picture_path: Path,
-        example_picture_path2: Path,
-    ) -> None:
+    def __init__(self, client: AsyncClient) -> None:
         self.client = client
-        self._example_picture_path = example_picture_path
-        self._example_picture_path2 = example_picture_path2
-
-    @property
-    def example_picture_bytes(self) -> bytes:
-        with self.example_picture_path.open("rb") as f:
-            return f.read()
-
-    @property
-    def example_picture_path(self) -> Path:
-        return self._example_picture_path
-
-    @property
-    def example_picture_path2(self) -> Path:
-        return self._example_picture_path2
-
-    @property
-    def example_picture_url(self) -> str:
-        return "https://api-ninjas.com/images/dogs/golden_retriever.jpg"
-
-    @property
-    def example_picture_bytes2(self) -> bytes:
-        with self.example_picture_path2.open("rb") as f:
-            return f.read()
-
-    @property
-    def example_picture_url2(self) -> str:
-        return "https://api-ninjas.com/images/dogs/siberian_husky.jpg"
-
-    @property
-    def example_pet(self) -> PetEntity:
-        return PetEntity(
-            name="jamie",
-            birthdate="24-10-2023",
-            picture="1.jamie.jpg",
-        )
-
-    @property
-    def example_populated_pet_type(self) -> PetTypeEntity:
-        return PetTypeEntity(
-            id="1",
-            type="Poodle",
-            family="Canidae",
-            genus="Canis",
-            attributes=[],
-            lifespan=16,
-            pets=["Tony", "Lian", "Jamie"],
-        )
-
-    @property
-    def example_empty_pet_type(self) -> PetTypeEntity:
-        return self.example_populated_pet_type.model_copy(update={"pets": []})
 
     async def unsafe_get_pet_type(self, type_id: str) -> Response:
         return await self.client.get(
@@ -184,8 +128,6 @@ class PetStoreTester:
         assert isinstance(body, expected)
         return body
 
-    T = TypeVar("T")
-
     def assert_error(self, r: Response, msg: str) -> None:
         body = self.assert_json(r, dict)
         assert "error" in body
@@ -234,19 +176,6 @@ class PetStoreTester:
     async def unsafe_delete(self, res: PetStoreResource) -> Response:
         return await self.client.delete(res)
 
-    async def assert_first_example_pet_type_post_created(self) -> PetTypeEntity:
-        example = self.example_empty_pet_type.type
-        p = await self.post_new_pet_type(type_name=example)
-        assert p == self.example_empty_pet_type
-        return p
-
-    async def assert_repeating_post_pet_type_name_error(
-        self, *, type_name: str
-    ) -> None:
-        r = await self.unsafe_post_pet_type(type_name)
-        # Same pet, second time should fail.
-        self.assert_malformed(r)
-
     async def unsafe_delete_pet_type(self, type_id: str) -> Response:
         return await self.client.delete(
             PetStoreResource.PET_TYPE_ID.format(type_id=type_id)
@@ -290,16 +219,6 @@ class PetStoreTester:
         body = self.assert_json(r, list)
         return [PetEntity.model_validate(p) for p in body]
 
-    async def post_new_pet_request(
-        self, pet_type: str, request: CreateNewPetRequest
-    ) -> PetEntity:
-        return await self.post_new_pet(
-            pet_type=pet_type,
-            pet_name=request.name,
-            birthdate=request.birthdate,
-            picture_url=request.picture_url.encoded_string(),
-        )
-
     async def post_new_pet(
         self,
         pet_type: str,
@@ -317,8 +236,18 @@ class PetStoreTester:
         body = self.assert_json(r, dict)
         return PetEntity.model_validate(body)
 
-    async def post_dummy_pet(self, pet_type: str) -> PetEntity:
-        return await self.post_new_pet(pet_type, pet_name="dummy-name")
+    async def post_new_pet_request(
+        self, pet_type: str, request: CreateNewPetRequest
+    ) -> PetEntity:
+        picture_url = (
+            request.picture_url.encoded_string() if request.picture_url else None
+        )
+        return await self.post_new_pet(
+            pet_type=pet_type,
+            pet_name=request.name,
+            birthdate=request.birthdate,
+            picture_url=picture_url,
+        )
 
     async def unsafe_delete_pet(self, type_id: str, pet_name: str) -> Response:
         return await self.client.delete(
@@ -364,6 +293,86 @@ class PetStoreTester:
         assert expected_content_type == content_type
         assert r.content
         return r.content
+
+
+class PetStoreTester(PetStoreClient):
+    def __init__(
+        self,
+        client: AsyncClient,
+        example_picture_path: Path,
+        example_picture_path2: Path,
+    ) -> None:
+        super().__init__(client)
+        self._example_picture_path = example_picture_path
+        self._example_picture_path2 = example_picture_path2
+
+    @property
+    def example_picture_bytes(self) -> bytes:
+        with self.example_picture_path.open("rb") as f:
+            return f.read()
+
+    @property
+    def example_picture_path(self) -> Path:
+        return self._example_picture_path
+
+    @property
+    def example_picture_path2(self) -> Path:
+        return self._example_picture_path2
+
+    @property
+    def example_picture_url(self) -> str:
+        return "https://api-ninjas.com/images/dogs/golden_retriever.jpg"
+
+    @property
+    def example_picture_bytes2(self) -> bytes:
+        with self.example_picture_path2.open("rb") as f:
+            return f.read()
+
+    @property
+    def example_picture_url2(self) -> str:
+        return "https://api-ninjas.com/images/dogs/siberian_husky.jpg"
+
+    @property
+    def example_pet(self) -> PetEntity:
+        return PetEntity(
+            name="jamie",
+            birthdate="24-10-2023",
+            picture="1.jamie.jpg",
+        )
+
+    @property
+    def example_populated_pet_type(self) -> PetTypeEntity:
+        return PetTypeEntity(
+            id="1",
+            type="Poodle",
+            family="Canidae",
+            genus="Canis",
+            attributes=[],
+            lifespan=16,
+            pets=["Tony", "Lian", "Jamie"],
+        )
+
+    @property
+    def example_empty_pet_type(self) -> PetTypeEntity:
+        return self.example_populated_pet_type.model_copy(update={"pets": []})
+
+    T = TypeVar("T")
+
+    async def assert_first_example_pet_type_post_created(self) -> PetTypeEntity:
+        example = self.example_empty_pet_type.type
+        p = await self.post_new_pet_type(type_name=example)
+        assert p == self.example_empty_pet_type
+        return p
+
+    async def assert_repeating_post_pet_type_name_error(
+        self, *, type_name: str
+    ) -> None:
+        r = await self.unsafe_post_pet_type(type_name)
+        # Same pet, second time should fail.
+        self.assert_malformed(r)
+
+    async def post_dummy_pet(self, pet_type: str) -> PetEntity:
+        return await self.post_new_pet(pet_type, pet_name="dummy-name")
 
 
 class PetStoreContainerTester(PetStoreTester):

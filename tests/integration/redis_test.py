@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from petstore import get_redis
+from petstore.store.redis import get_redis
 
 if TYPE_CHECKING:
     from docker.models.containers import Container
